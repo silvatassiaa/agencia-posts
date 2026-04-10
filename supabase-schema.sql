@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS post_ideas (
   session_id  UUID REFERENCES post_sessions(id) ON DELETE CASCADE NOT NULL,
   client_id   UUID REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
   title       TEXT NOT NULL,
-  format      TEXT, -- carousel, reels, feed, stories
+  format      TEXT,
   hook        TEXT,
   theme       TEXT,
   rationale   TEXT,
@@ -49,14 +49,14 @@ CREATE TABLE IF NOT EXISTS post_ideas (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Post queue (selected ideas waiting to be produced)
+-- Post queue
 CREATE TABLE IF NOT EXISTS post_queue (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   client_id    UUID REFERENCES clients(id) ON DELETE CASCADE NOT NULL,
   idea_id      UUID REFERENCES post_ideas(id) ON DELETE SET NULL,
   status       TEXT DEFAULT 'pending' CHECK (status IN ('pending','processing','done','failed')),
-  copy         JSONB,   -- {caption, hashtags, cta, talking_points, slide_texts}
-  art_urls     JSONB,   -- array of PNG URLs stored in Supabase Storage
+  copy         JSONB,
+  art_urls     JSONB,
   priority     INTEGER DEFAULT 0,
   notes        TEXT,
   created_at   TIMESTAMPTZ DEFAULT NOW(),
@@ -67,48 +67,38 @@ CREATE TABLE IF NOT EXISTS post_queue (
 -- ROW LEVEL SECURITY
 -- ============================================================
 
-ALTER TABLE profiles    ENABLE ROW LEVEL SECURITY;
-ALTER TABLE clients     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clients       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE post_sessions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE post_ideas  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE post_queue  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_ideas    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE post_queue    ENABLE ROW LEVEL SECURITY;
 
--- Profiles: users see only themselves
+-- Dropar policies existentes antes de recriar (evita erro de duplicata)
+DROP POLICY IF EXISTS "profiles_self"        ON profiles;
+DROP POLICY IF EXISTS "clients_admin"        ON clients;
+DROP POLICY IF EXISTS "sessions_via_client"  ON post_sessions;
+DROP POLICY IF EXISTS "ideas_via_client"     ON post_ideas;
+DROP POLICY IF EXISTS "queue_via_client"     ON post_queue;
+
 CREATE POLICY "profiles_self" ON profiles
   FOR ALL USING (auth.uid() = id);
 
--- Clients: admin sees all their clients; client sees only their own
 CREATE POLICY "clients_admin" ON clients
-  FOR ALL USING (
-    admin_id = auth.uid()
-    OR user_id = auth.uid()
-  );
+  FOR ALL USING (admin_id = auth.uid() OR user_id = auth.uid());
 
--- Post sessions: via client access
 CREATE POLICY "sessions_via_client" ON post_sessions
   FOR ALL USING (
-    client_id IN (
-      SELECT id FROM clients
-      WHERE admin_id = auth.uid() OR user_id = auth.uid()
-    )
+    client_id IN (SELECT id FROM clients WHERE admin_id = auth.uid() OR user_id = auth.uid())
   );
 
--- Post ideas: via client access
 CREATE POLICY "ideas_via_client" ON post_ideas
   FOR ALL USING (
-    client_id IN (
-      SELECT id FROM clients
-      WHERE admin_id = auth.uid() OR user_id = auth.uid()
-    )
+    client_id IN (SELECT id FROM clients WHERE admin_id = auth.uid() OR user_id = auth.uid())
   );
 
--- Post queue: via client access
 CREATE POLICY "queue_via_client" ON post_queue
   FOR ALL USING (
-    client_id IN (
-      SELECT id FROM clients
-      WHERE admin_id = auth.uid() OR user_id = auth.uid()
-    )
+    client_id IN (SELECT id FROM clients WHERE admin_id = auth.uid() OR user_id = auth.uid())
   );
 
 -- ============================================================
@@ -118,6 +108,9 @@ CREATE POLICY "queue_via_client" ON post_queue
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('post-arts', 'post-arts', true)
 ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "arts_public_read"         ON storage.objects;
+DROP POLICY IF EXISTS "arts_authenticated_write" ON storage.objects;
 
 CREATE POLICY "arts_public_read" ON storage.objects
   FOR SELECT USING (bucket_id = 'post-arts');
@@ -132,15 +125,16 @@ CREATE POLICY "arts_authenticated_write" ON storage.objects
 CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS trigger AS $$
 BEGIN
-  INSERT INTO profiles (id, role, name)
+  INSERT INTO public.profiles (id, role, name)
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'role', 'client'),
     COALESCE(NEW.raw_user_meta_data->>'name', NEW.email)
-  );
+  )
+  ON CONFLICT (id) DO NOTHING;  -- evita erro se já existir
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
