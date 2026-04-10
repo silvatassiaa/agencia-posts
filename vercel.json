@@ -5,6 +5,9 @@
     "api/generate-ideas.js": { "memory": 1024, "maxDuration": 60 },
     "api/generate-post.js":  { "memory": 2048, "maxDuration": 60 }
   },
+  "rewrites": [
+    { "source": "/", "destination": "/login.html" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
