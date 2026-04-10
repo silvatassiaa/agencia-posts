@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ideias de Posts — Agência Posts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/env.js"></script>
+</head>
+<body class="page">
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/dashboard.html" class="logo"><div class="logo-icon">✦</div>Agência Posts</a>
+    <div class="nav-user">
+      <span id="user-name"></span>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="/dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+    <a href="/clients.html"   class="sidebar-link">👥 Clientes</a>
+    <a href="/queue.html"     class="sidebar-link">📋 Fila de Posts</a>
+    <div class="sidebar-label mt-4">Conta</div>
+    <a href="/settings.html"  class="sidebar-link">⚙️ Configurações</a>
+  </aside>
+
+  <main class="main-content">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <p class="text-sm text-muted mb-2" id="breadcrumb">← Clientes</p>
+        <h1 id="page-title">Ideias de Posts</h1>
+        <p id="page-sub">Selecione os posts que deseja produzir</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-secondary" id="btn-regen" onclick="generateIdeas()" style="display:none">🔄 Regerar ideias</button>
+        <button class="btn btn-primary" id="btn-add-queue" onclick="addToQueue()" style="display:none">
+          Adicionar à fila (<span id="selected-count">0</span>)
+        </button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Generation state -->
+    <div id="state-generate" class="card" style="text-align:center;padding:48px">
+      <div style="font-size:48px;margin-bottom:16px">✨</div>
+      <h2 class="mb-2">Gerar 30 ideias de post</h2>
+      <p class="mb-6">A IA vai analisar o briefing, site e Instagram do cliente<br>e criar 30 ideias personalizadas para o negócio.</p>
+      <button class="btn btn-primary btn-lg" onclick="generateIdeas()" id="btn-generate">
+        ✨ Gerar ideias agora
+      </button>
+    </div>
+
+    <!-- Loading state -->
+    <div id="state-loading" class="hidden" style="text-align:center;padding:60px">
+      <div class="spinner" style="width:40px;height:40px;border-width:3px;margin:0 auto 20px"></div>
+      <h2 class="mb-2">Analisando o negócio...</h2>
+      <p id="loading-step">Lendo briefing e site do cliente</p>
+      <div class="progress-bar" style="max-width:400px;margin:20px auto 0">
+        <div class="progress-fill" id="progress-fill" style="width:10%"></div>
+      </div>
+    </div>
+
+    <!-- Ideas grid -->
+    <div id="state-ideas" class="hidden">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <span id="ideas-count" class="badge badge-purple">30 ideias</span>
+          <span class="text-sm text-muted ml-2" id="session-date"></span>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost btn-sm" onclick="selectAll()">Selecionar todos</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Limpar seleção</button>
+          <select class="select" style="width:160px" onchange="filterIdeas(this.value)">
+            <option value="">Todos os formatos</option>
+            <option value="carousel">🎠 Carrossel</option>
+            <option value="reels">🎬 Reels</option>
+            <option value="feed">📸 Feed</option>
+            <option value="stories">⭕ Stories</option>
+          </select>
+        </div>
+      </div>
+      <div class="ideas-grid" id="ideas-grid"></div>
+    </div>
+
+    <!-- Empty/error state -->
+    <div id="state-error" class="hidden empty-state">
+      <div class="empty-icon">⚠️</div>
+      <h3>Algo deu errado</h3>
+      <p id="error-msg">Não foi possível gerar as ideias. Tente novamente.</p>
+      <button class="btn btn-primary mt-4" onclick="generateIdeas()">Tentar novamente</button>
+    </div>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  const params   = new URLSearchParams(location.search);
+  const clientId = params.get('client');
+  let allIdeas   = [];
+  let selected   = new Set();
+  let sessionId  = null;
+
+  const FORMAT_ICONS = { carousel:'🎠', reels:'🎬', feed:'📸', stories:'⭕' };
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = '/login.html'; return; }
+    const name = session.user.user_metadata?.name || session.user.email;
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+
+    if (!clientId) { window.location.href = '/clients.html'; return; }
+
+    const { data: client } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (!client) { window.location.href = '/clients.html'; return; }
+
+    document.getElementById('breadcrumb').innerHTML = `<a href="/clients.html" style="color:var(--muted)">← Clientes</a> · <a href="/briefing.html?client=${clientId}" style="color:var(--muted)">${client.business_name}</a>`;
+    document.getElementById('page-title').textContent = `Ideias — ${client.business_name}`;
+
+    // Check for existing session
+    const { data: existingSession } = await sb.from('post_sessions')
+      .select('*, post_ideas(*)')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (existingSession?.post_ideas?.length > 0) {
+      sessionId = existingSession.id;
+      allIdeas  = existingSession.post_ideas.sort((a,b) => a.position - b.position);
+      selected  = new Set(allIdeas.filter(i => i.selected).map(i => i.id));
+      showIdeas(existingSession.created_at);
+      document.getElementById('btn-regen').style.display = '';
+    }
+  }
+
+  window.generateIdeas = async function() {
+    const { data: client } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (!client?.briefing || Object.keys(client.briefing).length === 0) {
+      toast('Preencha o briefing do cliente primeiro!', 'error');
+      setTimeout(() => window.location.href = `/briefing.html?client=${clientId}`, 1500);
+      return;
+    }
+
+    setState('loading');
+    document.getElementById('btn-regen').style.display = 'none';
+
+    const steps = [
+      'Lendo briefing do cliente...',
+      'Analisando site e Instagram...',
+      'Identificando oportunidades de conteúdo...',
+      'Criando ideias personalizadas...',
+      'Finalizando as 30 ideias...',
+    ];
+    let stepIdx = 0;
+    const progressEl = document.getElementById('progress-fill');
+    const stepEl     = document.getElementById('loading-step');
+    const interval   = setInterval(() => {
+      if (stepIdx < steps.length - 1) {
+        stepIdx++;
+        stepEl.textContent = steps[stepIdx];
+        progressEl.style.width = `${20 + stepIdx * 16}%`;
+      }
+    }, 3000);
+
+    try {
+      const res = await fetch('/api/generate-ideas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      });
+      clearInterval(interval);
+      progressEl.style.width = '100%';
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao gerar ideias');
+      }
+
+      const { ideas, sessionId: newSessionId } = await res.json();
+      sessionId = newSessionId;
+      allIdeas  = ideas;
+      selected  = new Set();
+      showIdeas(new Date().toISOString());
+      document.getElementById('btn-regen').style.display = '';
+      toast('30 ideias geradas com sucesso!', 'success');
+    } catch (err) {
+      clearInterval(interval);
+      document.getElementById('error-msg').textContent = err.message;
+      setState('error');
+    }
+  };
+
+  function showIdeas(createdAt) {
+    setState('ideas');
+    document.getElementById('session-date').textContent =
+      `Geradas em ${new Date(createdAt).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' })}`;
+    renderIdeas(allIdeas);
+    updateSelectionUI();
+  }
+
+  function renderIdeas(ideas) {
+    const grid = document.getElementById('ideas-grid');
+    grid.innerHTML = ideas.map(idea => `
+      <div class="idea-card ${selected.has(idea.id) ? 'selected' : ''}"
+           id="idea-${idea.id}" onclick="toggleIdea('${idea.id}')">
+        <div class="idea-num">#${idea.position}</div>
+        <div class="idea-title">${idea.title}</div>
+        <div class="idea-hook">${idea.hook}</div>
+        <div class="flex items-center justify-between">
+          <span class="badge badge-purple idea-format">
+            ${FORMAT_ICONS[idea.format] || '📱'} ${idea.format || 'feed'}
+          </span>
+          ${idea.theme ? `<span class="text-sm text-muted">${idea.theme}</span>` : ''}
+        </div>
+        ${idea.rationale ? `<p class="hint mt-2">${idea.rationale}</p>` : ''}
+      </div>
+    `).join('');
+  }
+
+  window.toggleIdea = function(id) {
+    if (selected.has(id)) selected.delete(id);
+    else selected.add(id);
+    document.getElementById(`idea-${id}`).classList.toggle('selected', selected.has(id));
+    updateSelectionUI();
+  };
+
+  window.selectAll    = () => { allIdeas.forEach(i => selected.add(i.id)); renderIdeas(allIdeas); updateSelectionUI(); };
+  window.clearSelection = () => { selected.clear(); renderIdeas(allIdeas); updateSelectionUI(); };
+
+  function updateSelectionUI() {
+    const count = selected.size;
+    document.getElementById('selected-count').textContent = count;
+    document.getElementById('btn-add-queue').style.display = count > 0 ? '' : 'none';
+  }
+
+  window.filterIdeas = function(format) {
+    const filtered = format ? allIdeas.filter(i => i.format === format) : allIdeas;
+    renderIdeas(filtered);
+  };
+
+  window.addToQueue = async function() {
+    const btn = document.getElementById('btn-add-queue');
+    btn.innerHTML = '<span class="spinner"></span> Adicionando...'; btn.disabled = true;
+
+    const toAdd = allIdeas.filter(i => selected.has(i.id));
+
+    // Mark as selected in DB
+    await sb.from('post_ideas').upsert(
+      toAdd.map(i => ({ id: i.id, selected: true }))
+    );
+
+    // Add to queue
+    const { error } = await sb.from('post_queue').insert(
+      toAdd.map(i => ({ client_id: clientId, idea_id: i.id, status: 'pending' }))
+    );
+
+    if (error) {
+      toast('Erro ao adicionar à fila: ' + error.message, 'error');
+    } else {
+      toast(`${toAdd.length} post(s) adicionados à fila!`, 'success');
+      setTimeout(() => window.location.href = '/queue.html', 1200);
+    }
+    btn.innerHTML = `Adicionar à fila (<span id="selected-count">${selected.size}</span>)`;
+    btn.disabled = false;
+  };
+
+  function setState(s) {
+    ['generate','loading','ideas','error'].forEach(id =>
+      document.getElementById(`state-${id}`).classList.toggle('hidden', id !== s)
+    );
+  }
+
+  window.logout = async () => { await sb.auth.signOut(); window.location.href = '/login.html'; };
+
+  function toast(msg, type='info') {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${{success:'✅',error:'❌',info:'ℹ️'}[type]}</span><span>${msg}</span>`;
+    c.appendChild(el); setTimeout(() => el.remove(), 4000);
+  }
+
+  init();
+</script>
+</body>
+</html>

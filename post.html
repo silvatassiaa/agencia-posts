@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Post Gerado — Agência Posts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/env.js"></script>
+</head>
+<body class="page">
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/dashboard.html" class="logo"><div class="logo-icon">✦</div>Agência Posts</a>
+    <div class="nav-user">
+      <span id="user-name"></span>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="/dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+    <a href="/clients.html"   class="sidebar-link">👥 Clientes</a>
+    <a href="/queue.html"     class="sidebar-link active">📋 Fila de Posts</a>
+    <div class="sidebar-label mt-4">Conta</div>
+    <a href="/settings.html"  class="sidebar-link">⚙️ Configurações</a>
+  </aside>
+
+  <main class="main-content" id="main-content">
+    <div class="empty-state"><div class="spinner"></div><p>Carregando post...</p></div>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  const queueId = new URLSearchParams(location.search).get('id');
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = '/login.html'; return; }
+    const name = session.user.user_metadata?.name || session.user.email;
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+
+    if (!queueId) { window.location.href = '/queue.html'; return; }
+
+    const { data: post } = await sb.from('post_queue')
+      .select('*, clients(*), post_ideas(*)')
+      .eq('id', queueId).single();
+
+    if (!post || post.status !== 'done') { window.location.href = '/queue.html'; return; }
+
+    renderPost(post);
+  }
+
+  function renderPost(post) {
+    const copy   = post.copy || {};
+    const arts   = post.art_urls || [];
+    const client = post.clients;
+    const idea   = post.post_ideas;
+    const color  = client?.brand_colors?.primary || '#6366f1';
+
+    document.title = `${idea?.title || 'Post'} — Agência Posts`;
+
+    document.getElementById('main-content').innerHTML = `
+      <div class="flex items-center justify-between mb-2">
+        <div>
+          <p class="text-sm text-muted mb-2">
+            <a href="/queue.html" style="color:var(--muted)">← Fila</a> ·
+            <a href="/briefing.html?client=${client?.id}" style="color:var(--muted)">${client?.business_name || ''}</a>
+          </p>
+          <h1>${idea?.title || 'Post gerado'}</h1>
+          <div class="flex gap-2 items-center mt-2">
+            <span class="badge badge-green">✅ Pronto</span>
+            <span class="badge badge-purple">${idea?.format || 'post'}</span>
+            <span class="text-sm text-muted">${new Date(post.completed_at || post.created_at).toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'})}</span>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary" onclick="downloadAll()">⬇️ Baixar artes</button>
+          <button class="btn btn-primary" onclick="copyCaption()">📋 Copiar caption</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div class="post-output">
+        <!-- Arts -->
+        <div>
+          <h2 class="mb-4">🎨 Artes (${arts.length} slides)</h2>
+          <div class="slides-preview" id="slides-preview">
+            ${arts.length ? arts.map((url, i) => `
+              <div style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);position:relative">
+                <img src="${url}" style="width:100%;display:block" alt="Slide ${i+1}">
+                <div style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.7);color:white;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700">
+                  ${i+1}
+                </div>
+                <a href="${url}" download="slide-${String(i+1).padStart(2,'0')}.png" class="btn btn-ghost btn-sm" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.7)">⬇</a>
+              </div>
+            `).join('') : `<div class="card" style="text-align:center;padding:40px">
+              <p class="text-muted">Artes não disponíveis</p>
+            </div>`}
+          </div>
+        </div>
+
+        <!-- Copy -->
+        <div class="copy-block">
+          <h2 class="mb-4">✍️ Copy & Texto</h2>
+
+          ${copy.caption ? `
+          <div class="copy-field">
+            <div class="flex items-center justify-between mb-2">
+              <div class="copy-label">Caption (legenda)</div>
+              <button class="btn btn-ghost btn-sm copy-btn" onclick="copyText('caption-text')">Copiar</button>
+            </div>
+            <div class="copy-text" id="caption-text">${copy.caption}</div>
+          </div>` : ''}
+
+          ${copy.slide_texts?.length ? `
+          <div class="copy-field">
+            <div class="copy-label">Textos dos slides</div>
+            ${copy.slide_texts.map((t, i) => `
+              <div style="border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-top:8px">
+                <div style="font-size:0.75rem;font-weight:700;color:var(--accent);margin-bottom:6px">SLIDE ${i+1}</div>
+                <div style="font-size:0.9rem;white-space:pre-wrap">${t}</div>
+              </div>
+            `).join('')}
+          </div>` : ''}
+
+          ${copy.cta ? `
+          <div class="copy-field">
+            <div class="copy-label">CTA</div>
+            <div class="copy-text">${copy.cta}</div>
+          </div>` : ''}
+
+          ${copy.hashtags?.length ? `
+          <div class="copy-field">
+            <div class="flex items-center justify-between mb-2">
+              <div class="copy-label">Hashtags</div>
+              <button class="btn btn-ghost btn-sm copy-btn" onclick="copyText('hashtags-text')">Copiar</button>
+            </div>
+            <div class="hashtags" id="hashtags-text">
+              ${copy.hashtags.map(h => `<span class="hashtag">${h.startsWith('#')?h:'#'+h}</span>`).join('')}
+            </div>
+            <input type="hidden" id="hashtags-raw" value="${copy.hashtags.map(h => h.startsWith('#')?h:'#'+h).join(' ')}">
+          </div>` : ''}
+
+          ${copy.talking_points?.length ? `
+          <div class="copy-field">
+            <div class="copy-label">Pontos-chave</div>
+            <ul style="list-style:none;display:flex;flex-direction:column;gap:8px">
+              ${copy.talking_points.map(p => `
+                <li style="display:flex;gap:10px;font-size:0.9rem">
+                  <span style="color:var(--accent);flex-shrink:0">→</span>
+                  <span>${p}</span>
+                </li>
+              `).join('')}
+            </ul>
+          </div>` : ''}
+
+          <div class="flex gap-2 mt-4">
+            <a href="/queue.html" class="btn btn-secondary">← Voltar à fila</a>
+            <a href="/ideas.html?client=${client?.id}" class="btn btn-ghost">Ver mais ideias</a>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Store for download
+    window._postArts = arts;
+    window._postCaption = copy.caption || '';
+    window._postHashtags = (copy.hashtags || []).map(h => h.startsWith('#') ? h : '#'+h).join(' ');
+  }
+
+  window.copyCaption = function() {
+    const text = window._postCaption + '\n\n' + window._postHashtags;
+    navigator.clipboard.writeText(text).then(() => toast('Caption copiada!', 'success'));
+  };
+
+  window.copyText = function(id) {
+    const el = document.getElementById(id);
+    if (id === 'hashtags-text') {
+      const raw = document.getElementById('hashtags-raw').value;
+      navigator.clipboard.writeText(raw).then(() => toast('Hashtags copiadas!', 'success'));
+    } else {
+      navigator.clipboard.writeText(el.textContent).then(() => toast('Texto copiado!', 'success'));
+    }
+  };
+
+  window.downloadAll = function() {
+    (window._postArts || []).forEach((url, i) => {
+      const a = document.createElement('a');
+      a.href = url; a.download = `slide-${String(i+1).padStart(2,'0')}.png`;
+      a.click();
+    });
+  };
+
+  window.logout = async () => { await sb.auth.signOut(); window.location.href = '/login.html'; };
+
+  function toast(msg, type='info') {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${{success:'✅',error:'❌',info:'ℹ️'}[type]}</span><span>${msg}</span>`;
+    c.appendChild(el); setTimeout(() => el.remove(), 4000);
+  }
+
+  init();
+</script>
+</body>
+</html>

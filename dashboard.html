@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Agência Posts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/env.js"></script>
+</head>
+<body class="page">
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/dashboard.html" class="logo">
+      <div class="logo-icon">✦</div>
+      Agência Posts
+    </a>
+    <div class="nav-user">
+      <span id="user-name">Carregando...</span>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="/dashboard.html" class="sidebar-link active">🏠 Dashboard</a>
+    <a href="/clients.html"   class="sidebar-link">👥 Clientes</a>
+    <a href="/queue.html"     class="sidebar-link">📋 Fila de Posts</a>
+
+    <div class="sidebar-label mt-4">Conta</div>
+    <a href="/settings.html"  class="sidebar-link">⚙️ Configurações</a>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 id="greeting">Olá! 👋</h1>
+        <p id="subtitle">Aqui está um resumo da sua agência</p>
+      </div>
+      <a href="/clients.html?new=1" class="btn btn-primary">+ Novo cliente</a>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-clients">—</div>
+        <div class="stat-label">Clientes ativos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-queue">—</div>
+        <div class="stat-label">Posts na fila</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-done">—</div>
+        <div class="stat-label">Posts prontos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-ideas">—</div>
+        <div class="stat-label">Ideias geradas</div>
+      </div>
+    </div>
+
+    <!-- Recent clients -->
+    <div class="flex items-center justify-between mb-4 mt-8">
+      <h2>Clientes recentes</h2>
+      <a href="/clients.html" class="btn btn-ghost btn-sm">Ver todos →</a>
+    </div>
+
+    <div class="clients-grid" id="clients-grid">
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="spinner"></div>
+        <p>Carregando...</p>
+      </div>
+    </div>
+
+    <!-- Recent queue -->
+    <div class="flex items-center justify-between mb-4 mt-8">
+      <h2>Fila recente</h2>
+      <a href="/queue.html" class="btn btn-ghost btn-sm">Ver todos →</a>
+    </div>
+
+    <div id="queue-preview">
+      <div class="empty-state">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = '/login.html'; return; }
+
+    const { data: profile } = await sb.from('profiles').select('*').eq('id', session.user.id).single();
+    const name = profile?.name || session.user.email;
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+    document.getElementById('greeting').textContent = `Olá, ${name.split(' ')[0]}! 👋`;
+
+    // Load stats
+    const [{ count: clientsCount }, { count: queuePending }, { count: queueDone }, { count: ideasCount }] = await Promise.all([
+      sb.from('clients').select('*', { count: 'exact', head: true }).eq('admin_id', session.user.id),
+      sb.from('post_queue').select('*', { count: 'exact', head: true }).in('client_id', await getClientIds(sb, session.user.id)).eq('status', 'pending'),
+      sb.from('post_queue').select('*', { count: 'exact', head: true }).in('client_id', await getClientIds(sb, session.user.id)).eq('status', 'done'),
+      sb.from('post_ideas').select('*', { count: 'exact', head: true }).in('client_id', await getClientIds(sb, session.user.id)),
+    ]);
+    document.getElementById('stat-clients').textContent = clientsCount ?? 0;
+    document.getElementById('stat-queue').textContent   = queuePending ?? 0;
+    document.getElementById('stat-done').textContent    = queueDone ?? 0;
+    document.getElementById('stat-ideas').textContent   = ideasCount ?? 0;
+
+    // Load clients
+    const { data: clients } = await sb.from('clients').select('*').eq('admin_id', session.user.id).order('created_at', { ascending: false }).limit(6);
+    renderClients(clients || []);
+
+    // Load queue
+    const clientIds = await getClientIds(sb, session.user.id);
+    if (clientIds.length) {
+      const { data: queue } = await sb.from('post_queue').select('*, clients(business_name), post_ideas(title)').in('client_id', clientIds).order('created_at', { ascending: false }).limit(5);
+      renderQueue(queue || []);
+    } else {
+      renderQueue([]);
+    }
+  }
+
+  async function getClientIds(sb, userId) {
+    const { data } = await sb.from('clients').select('id').eq('admin_id', userId);
+    return (data || []).map(c => c.id);
+  }
+
+  function renderClients(clients) {
+    const grid = document.getElementById('clients-grid');
+    if (!clients.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-icon">👥</div>
+        <h3>Nenhum cliente ainda</h3>
+        <p>Adicione seu primeiro cliente para começar a gerar posts.</p>
+        <a href="/clients.html?new=1" class="btn btn-primary mt-4">+ Adicionar cliente</a>
+      </div>`;
+      return;
+    }
+    grid.innerHTML = clients.map(c => `
+      <a href="/briefing.html?client=${c.id}" class="client-card">
+        <div class="client-avatar">${c.business_name[0].toUpperCase()}</div>
+        <div class="client-name">${c.business_name}</div>
+        <div class="client-meta">${c.instagram_handle ? '@' + c.instagram_handle : ''} ${c.website ? '· ' + c.website.replace(/https?:\/\//, '') : ''}</div>
+      </a>
+    `).join('') + `<div class="add-client-card client-card" onclick="location.href='/clients.html?new=1'">
+      <span style="font-size:28px">+</span>
+      <span>Novo cliente</span>
+    </div>`;
+  }
+
+  const STATUS_LABEL = { pending:'Pendente', processing:'Gerando...', done:'Pronto', failed:'Erro' };
+  const STATUS_CLS   = { pending:'badge-yellow', processing:'badge-purple', done:'badge-green', failed:'badge-red' };
+
+  function renderQueue(items) {
+    const el = document.getElementById('queue-preview');
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><h3>Fila vazia</h3><p>Selecione ideias de posts para adicionar à fila.</p></div>`;
+      return;
+    }
+    el.innerHTML = items.map(q => `
+      <div class="queue-item">
+        <div class="status-dot ${q.status}"></div>
+        <div class="queue-item-info">
+          <div class="queue-item-title">${q.post_ideas?.title || 'Post sem título'}</div>
+          <div class="queue-item-meta">${q.clients?.business_name || ''} · ${new Date(q.created_at).toLocaleDateString('pt-BR')}</div>
+        </div>
+        <span class="badge ${STATUS_CLS[q.status]}">${STATUS_LABEL[q.status]}</span>
+        ${q.status === 'done' ? `<a href="/post.html?id=${q.id}" class="btn btn-sm btn-secondary">Ver post</a>` : ''}
+        ${q.status === 'pending' ? `<a href="/queue.html" class="btn btn-sm btn-primary">Gerar</a>` : ''}
+      </div>
+    `).join('');
+  }
+
+  window.logout = async function() {
+    await sb.auth.signOut();
+    window.location.href = '/login.html';
+  };
+
+  init();
+</script>
+</body>
+</html>

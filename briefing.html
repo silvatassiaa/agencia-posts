@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Briefing — Agência Posts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/env.js"></script>
+</head>
+<body class="page">
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/dashboard.html" class="logo"><div class="logo-icon">✦</div>Agência Posts</a>
+    <div class="nav-user">
+      <span id="user-name"></span>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="/dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+    <a href="/clients.html"   class="sidebar-link">👥 Clientes</a>
+    <a href="/queue.html"     class="sidebar-link">📋 Fila de Posts</a>
+    <div class="sidebar-label mt-4">Conta</div>
+    <a href="/settings.html"  class="sidebar-link">⚙️ Configurações</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <p class="text-sm text-muted mb-2"><a href="/clients.html" style="color:var(--muted)">← Clientes</a></p>
+        <h1 id="client-name">Briefing do cliente</h1>
+        <p>Preencha as informações do negócio para gerar posts relevantes</p>
+      </div>
+      <a href="#" id="btn-go-ideas" class="btn btn-primary hidden">Gerar 30 ideias →</a>
+    </div>
+
+    <hr class="divider">
+
+    <form id="briefing-form" class="flex flex-col gap-6" onsubmit="saveBriefing(event)">
+
+      <!-- Bloco 1: Sobre o negócio -->
+      <div class="card">
+        <h2 class="mb-4">🏢 Sobre o negócio</h2>
+        <div class="flex flex-col gap-4">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="label">Nome do negócio</label>
+              <input type="text" class="input" id="b-name" placeholder="Nome da empresa" required>
+            </div>
+            <div class="form-group">
+              <label class="label">Segmento / nicho</label>
+              <input type="text" class="input" id="b-segment" placeholder="Ex: Loja de colecionáveis, SaaS B2B, Moda feminina...">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label">Descrição do negócio</label>
+            <textarea class="textarea" id="b-description" placeholder="O que o negócio faz? Qual o diferencial? Para quem atende?" rows="3"></textarea>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="label">Site</label>
+              <input type="url" class="input" id="b-site" placeholder="https://...">
+            </div>
+            <div class="form-group">
+              <label class="label">Instagram</label>
+              <input type="text" class="input" id="b-insta" placeholder="@handle">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bloco 2: Público-alvo -->
+      <div class="card">
+        <h2 class="mb-4">🎯 Público-alvo</h2>
+        <div class="flex flex-col gap-4">
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="label">Quem é o cliente ideal?</label>
+              <input type="text" class="input" id="b-audience" placeholder="Ex: Colecionadores entre 20-35 anos, nerds, otakus">
+            </div>
+            <div class="form-group">
+              <label class="label">Faixa etária</label>
+              <select class="select" id="b-age">
+                <option value="">Selecione...</option>
+                <option value="13-17">13 – 17 anos</option>
+                <option value="18-24">18 – 24 anos</option>
+                <option value="25-34">25 – 34 anos</option>
+                <option value="35-44">35 – 44 anos</option>
+                <option value="45+">45+ anos</option>
+                <option value="all">Todas as idades</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label">Dores e desejos do público</label>
+            <textarea class="textarea" id="b-painpoints" placeholder="O que o público quer? O que os frustra? O que eles buscam?" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bloco 3: Tom de voz -->
+      <div class="card">
+        <h2 class="mb-4">🗣 Tom de voz & identidade</h2>
+        <div class="flex flex-col gap-4">
+          <div class="form-group">
+            <label class="label">Tom de voz</label>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <label class="tone-option"><input type="checkbox" name="tone" value="descontraído"> 😄 Descontraído</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="especialista"> 🧠 Especialista</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="inspirador"> ✨ Inspirador</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="divertido"> 🎉 Divertido</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="direto"> 🎯 Direto ao ponto</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="comunitário"> 🤝 Comunitário</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="provocativo"> 🔥 Provocativo</label>
+              <label class="tone-option"><input type="checkbox" name="tone" value="educativo"> 📚 Educativo</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="label">Palavras que definem a marca</label>
+            <input type="text" class="input" id="b-keywords" placeholder="Ex: geek, paixão, coleção, comunidade, autenticidade">
+          </div>
+          <div class="form-group">
+            <label class="label">Evitar (o que NÃO combina com a marca)</label>
+            <input type="text" class="input" id="b-avoid" placeholder="Ex: linguagem muito formal, política, polêmicas">
+          </div>
+        </div>
+      </div>
+
+      <!-- Bloco 4: Objetivos de conteúdo -->
+      <div class="card">
+        <h2 class="mb-4">📈 Objetivos do conteúdo</h2>
+        <div class="flex flex-col gap-4">
+          <div class="form-group">
+            <label class="label">Objetivos principais (marque todos que se aplicam)</label>
+            <div class="flex gap-2" style="flex-wrap:wrap">
+              <label class="tone-option"><input type="checkbox" name="goal" value="engajamento"> ❤️ Engajamento</label>
+              <label class="tone-option"><input type="checkbox" name="goal" value="seguidores"> 👥 Novos seguidores</label>
+              <label class="tone-option"><input type="checkbox" name="goal" value="vendas"> 💰 Vendas</label>
+              <label class="tone-option"><input type="checkbox" name="goal" value="autoridade"> 🏆 Autoridade</label>
+              <label class="tone-option"><input type="checkbox" name="goal" value="comunidade"> 🌐 Comunidade</label>
+              <label class="tone-option"><input type="checkbox" name="goal" value="awareness"> 📢 Awareness</label>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="label">Produtos / serviços em destaque</label>
+              <textarea class="textarea" id="b-products" placeholder="Ex: action figures, funko pops, pré-vendas, envio grátis" rows="2"></textarea>
+            </div>
+            <div class="form-group">
+              <label class="label">Observações para a IA</label>
+              <textarea class="textarea" id="b-notes" placeholder="Qualquer detalhe extra que a IA deve considerar ao gerar os posts" rows="2"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button type="submit" class="btn btn-primary btn-lg" id="btn-save">
+          💾 Salvar briefing
+        </button>
+        <button type="button" class="btn btn-secondary btn-lg hidden" id="btn-ideas" onclick="goToIdeas()">
+          ✨ Gerar 30 ideias de post →
+        </button>
+      </div>
+    </form>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<style>
+.tone-option {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 20px; cursor: pointer;
+  border: 1px solid var(--border); font-size: 0.85rem;
+  transition: all 0.15s; font-weight: 500; color: var(--muted);
+  user-select: none;
+}
+.tone-option input { display: none; }
+.tone-option:has(input:checked) {
+  background: rgba(99,102,241,0.15); border-color: var(--accent); color: var(--accent2);
+}
+.tone-option:hover { border-color: var(--accent); }
+</style>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  const params = new URLSearchParams(location.search);
+  const clientId = params.get('client');
+  let clientData = null;
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = '/login.html'; return; }
+    const name = session.user.user_metadata?.name || session.user.email;
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+
+    if (!clientId) { window.location.href = '/clients.html'; return; }
+
+    const { data: client } = await sb.from('clients').select('*').eq('id', clientId).single();
+    if (!client) { window.location.href = '/clients.html'; return; }
+    clientData = client;
+
+    document.getElementById('client-name').textContent = `Briefing — ${client.business_name}`;
+    document.getElementById('btn-go-ideas').href = `/ideas.html?client=${clientId}`;
+
+    // Populate form with existing briefing
+    const b = client.briefing || {};
+    document.getElementById('b-name').value        = client.business_name || '';
+    document.getElementById('b-segment').value     = b.segment     || '';
+    document.getElementById('b-description').value = b.description || '';
+    document.getElementById('b-site').value        = client.website || '';
+    document.getElementById('b-insta').value       = client.instagram_handle ? '@' + client.instagram_handle : '';
+    document.getElementById('b-audience').value    = b.audience    || '';
+    document.getElementById('b-age').value         = b.age         || '';
+    document.getElementById('b-painpoints').value  = b.painpoints  || '';
+    document.getElementById('b-keywords').value    = b.keywords    || '';
+    document.getElementById('b-avoid').value       = b.avoid       || '';
+    document.getElementById('b-products').value    = b.products    || '';
+    document.getElementById('b-notes').value       = b.notes       || '';
+
+    if (b.tone)  b.tone.forEach(v  => { const cb = document.querySelector(`[name="tone"][value="${v}"]`);  if (cb) cb.checked = true; });
+    if (b.goals) b.goals.forEach(v => { const cb = document.querySelector(`[name="goal"][value="${v}"]`);  if (cb) cb.checked = true; });
+
+    if (Object.keys(b).length > 0) {
+      document.getElementById('btn-go-ideas').classList.remove('hidden');
+      document.getElementById('btn-ideas').classList.remove('hidden');
+    }
+  }
+
+  window.saveBriefing = async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-save');
+    btn.innerHTML = '<span class="spinner"></span> Salvando...'; btn.disabled = true;
+
+    const tones  = [...document.querySelectorAll('[name="tone"]:checked')].map(cb => cb.value);
+    const goals  = [...document.querySelectorAll('[name="goal"]:checked')].map(cb => cb.value);
+    const insta  = document.getElementById('b-insta').value.replace('@','');
+
+    const briefing = {
+      segment:     document.getElementById('b-segment').value,
+      description: document.getElementById('b-description').value,
+      audience:    document.getElementById('b-audience').value,
+      age:         document.getElementById('b-age').value,
+      painpoints:  document.getElementById('b-painpoints').value,
+      keywords:    document.getElementById('b-keywords').value,
+      avoid:       document.getElementById('b-avoid').value,
+      products:    document.getElementById('b-products').value,
+      notes:       document.getElementById('b-notes').value,
+      tone: tones, goals,
+    };
+
+    const { error } = await sb.from('clients').update({
+      business_name:    document.getElementById('b-name').value,
+      instagram_handle: insta || null,
+      website:          document.getElementById('b-site').value || null,
+      briefing,
+      updated_at:       new Date().toISOString(),
+    }).eq('id', clientId);
+
+    if (error) {
+      toast(error.message, 'error');
+    } else {
+      toast('Briefing salvo com sucesso!', 'success');
+      document.getElementById('btn-go-ideas').classList.remove('hidden');
+      document.getElementById('btn-ideas').classList.remove('hidden');
+    }
+    btn.innerHTML = '💾 Salvar briefing'; btn.disabled = false;
+  };
+
+  window.goToIdeas = () => window.location.href = `/ideas.html?client=${clientId}`;
+  window.logout    = async () => { await sb.auth.signOut(); window.location.href = '/login.html'; };
+
+  function toast(msg, type='info') {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${{success:'✅',error:'❌',info:'ℹ️'}[type]}</span><span>${msg}</span>`;
+    c.appendChild(el); setTimeout(() => el.remove(), 4000);
+  }
+
+  init();
+</script>
+</body>
+</html>

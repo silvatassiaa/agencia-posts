@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fila de Posts — Agência Posts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/env.js"></script>
+</head>
+<body class="page">
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/dashboard.html" class="logo"><div class="logo-icon">✦</div>Agência Posts</a>
+    <div class="nav-user">
+      <span id="user-name"></span>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="/dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+    <a href="/clients.html"   class="sidebar-link">👥 Clientes</a>
+    <a href="/queue.html"     class="sidebar-link active">📋 Fila de Posts</a>
+    <div class="sidebar-label mt-4">Conta</div>
+    <a href="/settings.html"  class="sidebar-link">⚙️ Configurações</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="flex items-center justify-between mb-6">
+      <div><h1>Fila de Posts</h1><p>Gerencie e produza os posts dos seus clientes</p></div>
+      <div class="flex gap-2">
+        <select class="select" style="width:200px" id="filter-client" onchange="loadQueue()">
+          <option value="">Todos os clientes</option>
+        </select>
+        <select class="select" style="width:160px" id="filter-status" onchange="loadQueue()">
+          <option value="">Todos os status</option>
+          <option value="pending">Pendente</option>
+          <option value="processing">Gerando</option>
+          <option value="done">Pronto</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="queue-list">
+      <div class="empty-state"><div class="spinner"></div></div>
+    </div>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  let userId = null;
+
+  const STATUS_LABEL = { pending:'Pendente', processing:'Gerando...', done:'Pronto', failed:'Erro' };
+  const STATUS_CLS   = { pending:'badge-yellow', processing:'badge-purple', done:'badge-green', failed:'badge-red' };
+  const FORMAT_ICONS = { carousel:'🎠', reels:'🎬', feed:'📸', stories:'⭕' };
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = '/login.html'; return; }
+    userId = session.user.id;
+    const name = session.user.user_metadata?.name || session.user.email;
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+
+    // Load clients for filter
+    const { data: clients } = await sb.from('clients').select('id, business_name').eq('admin_id', userId).order('business_name');
+    const sel = document.getElementById('filter-client');
+    (clients||[]).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id; opt.textContent = c.business_name;
+      sel.appendChild(opt);
+    });
+
+    // Pre-select from URL param
+    const params = new URLSearchParams(location.search);
+    if (params.get('client')) sel.value = params.get('client');
+
+    await loadQueue();
+  }
+
+  window.loadQueue = async function() {
+    const clientFilter = document.getElementById('filter-client').value;
+    const statusFilter = document.getElementById('filter-status').value;
+
+    // Get accessible client IDs
+    const { data: clients } = await sb.from('clients').select('id').eq('admin_id', userId);
+    let clientIds = (clients||[]).map(c => c.id);
+    if (clientFilter) clientIds = clientIds.filter(id => id === clientFilter);
+
+    if (!clientIds.length) { renderQueue([]); return; }
+
+    let query = sb.from('post_queue')
+      .select('*, clients(business_name, brand_colors), post_ideas(title, format, hook)')
+      .in('client_id', clientIds)
+      .order('created_at', { ascending: false });
+    if (statusFilter) query = query.eq('status', statusFilter);
+
+    const { data: queue } = await query;
+    renderQueue(queue || []);
+  };
+
+  function renderQueue(items) {
+    const el = document.getElementById('queue-list');
+    if (!items.length) {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h3>Nenhum post na fila</h3>
+        <p>Selecione ideias de post na tela de ideias para adicionar à fila.</p>
+        <a href="/clients.html" class="btn btn-primary mt-4">Ir para clientes</a>
+      </div>`;
+      return;
+    }
+
+    el.innerHTML = items.map(q => {
+      const idea   = q.post_ideas;
+      const client = q.clients;
+      const color  = client?.brand_colors?.primary || '#6366f1';
+      return `
+      <div class="queue-item" id="qitem-${q.id}">
+        <div class="status-dot ${q.status}"></div>
+        <div style="width:4px;height:40px;border-radius:2px;background:${color};flex-shrink:0"></div>
+        <div class="queue-item-info">
+          <div class="queue-item-title">${idea?.title || 'Post sem título'}</div>
+          <div class="queue-item-meta">
+            ${client?.business_name || ''} ·
+            ${FORMAT_ICONS[idea?.format] || '📱'} ${idea?.format || 'post'} ·
+            ${new Date(q.created_at).toLocaleDateString('pt-BR')}
+          </div>
+          ${idea?.hook ? `<p class="hint mt-2">"${idea.hook}"</p>` : ''}
+        </div>
+        <div class="queue-item-actions">
+          <span class="badge ${STATUS_CLS[q.status]}">${STATUS_LABEL[q.status]}</span>
+          ${q.status === 'pending' ?
+            `<button class="btn btn-primary btn-sm" onclick="generatePost('${q.id}')">✨ Gerar post</button>` : ''}
+          ${q.status === 'done' ?
+            `<a href="/post.html?id=${q.id}" class="btn btn-secondary btn-sm">👁 Ver post</a>` : ''}
+          ${q.status === 'failed' ?
+            `<button class="btn btn-danger btn-sm" onclick="generatePost('${q.id}')">🔄 Retry</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="removeFromQueue('${q.id}')">🗑</button>
+        </div>
+      </div>
+    `}).join('');
+  }
+
+  window.generatePost = async function(queueId) {
+    const btn = document.querySelector(`#qitem-${queueId} .btn-primary, #qitem-${queueId} .btn-danger`);
+    if (btn) { btn.innerHTML = '<span class="spinner"></span> Gerando...'; btn.disabled = true; }
+
+    // Update status to processing
+    await sb.from('post_queue').update({ status: 'processing' }).eq('id', queueId);
+    await loadQueue();
+
+    try {
+      const res = await fetch('/api/generate-post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ queueId }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro na geração');
+      }
+
+      const result = await res.json();
+      toast('Post gerado com sucesso! 🎉', 'success');
+      await loadQueue();
+
+      // Navigate to post viewer
+      setTimeout(() => window.location.href = `/post.html?id=${queueId}`, 1000);
+    } catch (err) {
+      await sb.from('post_queue').update({ status: 'failed' }).eq('id', queueId);
+      toast('Erro: ' + err.message, 'error');
+      await loadQueue();
+    }
+  };
+
+  window.removeFromQueue = async function(id) {
+    if (!confirm('Remover este item da fila?')) return;
+    await sb.from('post_queue').delete().eq('id', id);
+    toast('Removido da fila', 'info');
+    await loadQueue();
+  };
+
+  window.logout = async () => { await sb.auth.signOut(); window.location.href = '/login.html'; };
+
+  function toast(msg, type='info') {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${{success:'✅',error:'❌',info:'ℹ️'}[type]}</span><span>${msg}</span>`;
+    c.appendChild(el); setTimeout(() => el.remove(), 4000);
+  }
+
+  init();
+</script>
+</body>
+</html>

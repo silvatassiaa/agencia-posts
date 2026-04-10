@@ -1,0 +1,14 @@
+{
+  "name": "agencia-posts",
+  "version": "1.0.0",
+  "description": "Plataforma de geração de posts para agências de conteúdo",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@sparticuz/chromium": "^133.0.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "puppeteer-core": "^24.4.0"
+  }
+}

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clientes — Agência Posts</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+  <script src="js/env.js"></script>
+</head>
+<body class="page">
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a href="/dashboard.html" class="logo"><div class="logo-icon">✦</div>Agência Posts</a>
+    <div class="nav-user">
+      <span id="user-name"></span>
+      <div class="avatar" id="user-avatar">?</div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-label">Menu</div>
+    <a href="/dashboard.html" class="sidebar-link">🏠 Dashboard</a>
+    <a href="/clients.html"   class="sidebar-link active">👥 Clientes</a>
+    <a href="/queue.html"     class="sidebar-link">📋 Fila de Posts</a>
+    <div class="sidebar-label mt-4">Conta</div>
+    <a href="/settings.html"  class="sidebar-link">⚙️ Configurações</a>
+  </aside>
+
+  <main class="main-content">
+    <div class="flex items-center justify-between mb-6">
+      <div><h1>Clientes</h1><p>Gerencie os negócios da sua agência</p></div>
+      <button class="btn btn-primary" onclick="openModal()">+ Novo cliente</button>
+    </div>
+
+    <div class="clients-grid" id="clients-grid">
+      <div class="empty-state" style="grid-column:1/-1"><div class="spinner"></div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Modal: Novo cliente -->
+<div class="modal-overlay hidden" id="modal-new">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Novo cliente</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <form class="flex flex-col gap-4" onsubmit="createClient(event)">
+      <div class="form-group">
+        <label class="label">Nome do negócio *</label>
+        <input type="text" class="input" id="c-name" placeholder="Ex: Ovelha Nerd" required>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="label">Instagram</label>
+          <input type="text" class="input" id="c-insta" placeholder="@handle">
+        </div>
+        <div class="form-group">
+          <label class="label">Website</label>
+          <input type="url" class="input" id="c-site" placeholder="https://...">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="label">E-mail de login do cliente (opcional)</label>
+        <input type="email" class="input" id="c-email" placeholder="cliente@email.com">
+        <span class="hint">Se preenchido, o cliente receberá convite para acessar a plataforma.</span>
+      </div>
+      <div class="form-group">
+        <label class="label">Cor primária da marca</label>
+        <div class="flex gap-2 items-center">
+          <input type="color" id="c-color" value="#6366f1" style="width:44px;height:44px;border-radius:8px;border:1px solid var(--border);cursor:pointer;background:none;">
+          <input type="text" class="input" id="c-color-hex" value="#6366f1" placeholder="#6366f1" style="max-width:140px;">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg" id="btn-create">Criar cliente</button>
+    </form>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+
+  let currentUserId = null;
+
+  async function init() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) { window.location.href = '/login.html'; return; }
+    currentUserId = session.user.id;
+    const name = session.user.user_metadata?.name || session.user.email;
+    document.getElementById('user-name').textContent = name;
+    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+    await loadClients();
+    if (new URLSearchParams(location.search).get('new') === '1') openModal();
+  }
+
+  async function loadClients() {
+    const { data: clients } = await sb.from('clients').select('*').eq('admin_id', currentUserId).order('created_at', { ascending: false });
+    renderClients(clients || []);
+  }
+
+  function renderClients(clients) {
+    const grid = document.getElementById('clients-grid');
+    if (!clients.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-icon">👥</div><h3>Nenhum cliente ainda</h3>
+        <p>Clique em "+ Novo cliente" para começar.</p></div>`;
+      return;
+    }
+    grid.innerHTML = clients.map(c => `
+      <div class="client-card" onclick="location.href='/briefing.html?client=${c.id}'">
+        <div class="client-avatar" style="background:linear-gradient(135deg,${c.brand_colors?.primary||'#6366f1'},#4f46e5)">${c.business_name[0].toUpperCase()}</div>
+        <div class="client-name">${c.business_name}</div>
+        <div class="client-meta">${c.instagram_handle ? '@'+c.instagram_handle : '—'} ${c.website ? '· '+c.website.replace(/https?:\/\//,'') : ''}</div>
+        <div class="flex gap-2 mt-4">
+          <a href="/briefing.html?client=${c.id}" class="btn btn-secondary btn-sm" onclick="event.stopPropagation()">Briefing</a>
+          <a href="/ideas.html?client=${c.id}" class="btn btn-primary btn-sm" onclick="event.stopPropagation()">Gerar ideias</a>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deleteClient('${c.id}','${c.business_name}')">🗑</button>
+        </div>
+      </div>
+    `).join('') + `<div class="add-client-card client-card" onclick="openModal()">
+      <span style="font-size:28px">+</span><span>Novo cliente</span></div>`;
+  }
+
+  window.createClient = async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('btn-create');
+    btn.innerHTML = '<span class="spinner"></span> Criando...'; btn.disabled = true;
+
+    const name = document.getElementById('c-name').value;
+    const insta = document.getElementById('c-insta').value.replace('@','');
+    const site  = document.getElementById('c-site').value;
+    const color = document.getElementById('c-color-hex').value;
+
+    const { data: client, error } = await sb.from('clients').insert({
+      business_name: name,
+      instagram_handle: insta || null,
+      website: site || null,
+      admin_id: currentUserId,
+      brand_colors: { primary: color, secondary: '#111827', text: '#ffffff' },
+    }).select().single();
+
+    if (error) {
+      toast(error.message, 'error');
+      btn.innerHTML = 'Criar cliente'; btn.disabled = false;
+      return;
+    }
+
+    // Invite client user if email provided
+    const clientEmail = document.getElementById('c-email').value;
+    if (clientEmail) {
+      await fetch('/api/invite-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: clientEmail, clientId: client.id, clientName: name })
+      });
+    }
+
+    toast(`Cliente "${name}" criado!`, 'success');
+    closeModal();
+    await loadClients();
+    // Go to briefing
+    setTimeout(() => window.location.href = `/briefing.html?client=${client.id}`, 800);
+  };
+
+  window.deleteClient = async function(id, name) {
+    if (!confirm(`Excluir "${name}" e todos os dados? Essa ação não pode ser desfeita.`)) return;
+    await sb.from('clients').delete().eq('id', id);
+    toast(`"${name}" excluído`, 'info');
+    await loadClients();
+  };
+
+  window.openModal  = () => document.getElementById('modal-new').classList.remove('hidden');
+  window.closeModal = () => document.getElementById('modal-new').classList.add('hidden');
+  window.logout     = async () => { await sb.auth.signOut(); window.location.href = '/login.html'; };
+
+  // Sync color picker + hex input
+  document.getElementById('c-color').addEventListener('input', e => document.getElementById('c-color-hex').value = e.target.value);
+  document.getElementById('c-color-hex').addEventListener('input', e => { if (/^#[0-9a-f]{6}$/i.test(e.target.value)) document.getElementById('c-color').value = e.target.value; });
+
+  function toast(msg, type='info') {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span>${{success:'✅',error:'❌',info:'ℹ️'}[type]}</span><span>${msg}</span>`;
+    c.appendChild(el); setTimeout(() => el.remove(), 4000);
+  }
+
+  init();
+</script>
+</body>
+</html>
