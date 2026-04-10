@@ -21,12 +21,12 @@
     <div class="auth-card">
       <!-- Tabs -->
       <div class="flex gap-2 mb-6" style="border-bottom:1px solid var(--border); padding-bottom:16px;">
-        <button class="btn btn-sm" id="tab-login" onclick="showTab('login')">Entrar</button>
-        <button class="btn btn-ghost btn-sm" id="tab-signup" onclick="showTab('signup')">Criar conta</button>
+        <button class="btn btn-sm btn-primary" id="tab-login" type="button">Entrar</button>
+        <button class="btn btn-ghost btn-sm" id="tab-signup" type="button">Criar conta</button>
       </div>
 
       <!-- Login form -->
-      <form id="form-login" class="flex flex-col gap-4" onsubmit="handleLogin(event)">
+      <form id="form-login" class="flex flex-col gap-4">
         <div class="form-group">
           <label class="label">E-mail</label>
           <input type="email" class="input" id="login-email" placeholder="seu@email.com" required>
@@ -39,12 +39,12 @@
           Entrar
         </button>
         <p class="text-sm text-muted" style="text-align:center">
-          <a href="#" onclick="showForgot()" style="color:var(--accent2)">Esqueci minha senha</a>
+          <a href="#" id="link-forgot" style="color:var(--accent2)">Esqueci minha senha</a>
         </p>
       </form>
 
       <!-- Signup form -->
-      <form id="form-signup" class="flex flex-col gap-4 hidden" onsubmit="handleSignup(event)">
+      <form id="form-signup" class="flex flex-col gap-4 hidden">
         <div class="form-group">
           <label class="label">Seu nome</label>
           <input type="text" class="input" id="signup-name" placeholder="Nome completo" required>
@@ -58,12 +58,8 @@
           <input type="password" class="input" id="signup-password" placeholder="Mínimo 8 caracteres" minlength="8" required>
         </div>
         <button type="submit" class="btn btn-primary w-full btn-lg" id="btn-signup">
-          Criar conta de admin
+          Criar conta
         </button>
-        <p class="hint" style="text-align:center">
-          A primeira conta criada recebe perfil de <strong>admin</strong> (agência).<br>
-          Clientes são convidados dentro da plataforma.
-        </p>
       </form>
     </div>
 
@@ -75,77 +71,101 @@
 
 <div id="toast-container"></div>
 
-<script type="module">
-  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+<script>
+  // Non-module script — runs synchronously, no async load issues
 
-  const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+  const SUPABASE_URL      = window.SUPABASE_URL;
+  const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 
-  // If already logged in, redirect
-  sb.auth.getSession().then(({ data: { session } }) => {
-    if (session) window.location.href = '/dashboard.html';
-  });
+  // Load Supabase via CDN
+  const script = document.createElement('script');
+  script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+  script.onload = function() {
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  window.showTab = function(tab) {
+    // Redirect if already logged in
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if (session) window.location.href = '/dashboard.html';
+    });
+
+    // Tab switching
+    document.getElementById('tab-login').addEventListener('click', () => showTab('login'));
+    document.getElementById('tab-signup').addEventListener('click', () => showTab('signup'));
+
+    // Login form
+    document.getElementById('form-login').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-login');
+      btn.innerHTML = '<span class="spinner"></span> Entrando...';
+      btn.disabled = true;
+
+      const email    = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        toast(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message, 'error');
+        btn.innerHTML = 'Entrar';
+        btn.disabled = false;
+      } else {
+        window.location.href = '/dashboard.html';
+      }
+    });
+
+    // Signup form
+    document.getElementById('form-signup').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-signup');
+      btn.innerHTML = '<span class="spinner"></span> Criando...';
+      btn.disabled = true;
+
+      const name     = document.getElementById('signup-name').value;
+      const email    = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+
+      const { error } = await sb.auth.signUp({
+        email, password,
+        options: { data: { name, role: 'admin' } }
+      });
+
+      if (error) {
+        toast(error.message, 'error');
+        btn.innerHTML = 'Criar conta';
+        btn.disabled = false;
+      } else {
+        toast('Conta criada! Verifique seu e-mail para confirmar.', 'success');
+        showTab('login');
+      }
+    });
+
+    // Forgot password
+    document.getElementById('link-forgot').addEventListener('click', async function(e) {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      if (!email) { toast('Digite seu e-mail primeiro', 'error'); return; }
+      await sb.auth.resetPasswordForEmail(email);
+      toast('Link enviado para ' + email, 'success');
+    });
+  };
+  document.head.appendChild(script);
+
+  function showTab(tab) {
     document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
     document.getElementById('form-signup').classList.toggle('hidden', tab !== 'signup');
     document.getElementById('tab-login').className  = tab === 'login'  ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
     document.getElementById('tab-signup').className = tab === 'signup' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
-  };
+  }
 
-  window.handleLogin = async function(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-login');
-    btn.innerHTML = '<span class="spinner"></span> Entrando...';
-    btn.disabled = true;
-
-    const { error } = await sb.auth.signInWithPassword({
-      email:    document.getElementById('login-email').value,
-      password: document.getElementById('login-password').value,
-    });
-
-    if (error) {
-      toast(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message, 'error');
-      btn.innerHTML = 'Entrar'; btn.disabled = false;
-    } else {
-      window.location.href = '/dashboard.html';
-    }
-  };
-
-  window.handleSignup = async function(e) {
-    e.preventDefault();
-    const btn = document.getElementById('btn-signup');
-    btn.innerHTML = '<span class="spinner"></span> Criando conta...';
-    btn.disabled = true;
-
-    const { error } = await sb.auth.signUp({
-      email:    document.getElementById('signup-email').value,
-      password: document.getElementById('signup-password').value,
-      options:  { data: { name: document.getElementById('signup-name').value, role: 'admin' } }
-    });
-
-    if (error) {
-      toast(error.message, 'error');
-      btn.innerHTML = 'Criar conta de admin'; btn.disabled = false;
-    } else {
-      toast('Conta criada! Verifique seu e-mail.', 'success');
-      showTab('login');
-    }
-  };
-
-  window.showForgot = async function() {
-    const email = document.getElementById('login-email').value;
-    if (!email) { toast('Digite seu e-mail primeiro', 'error'); return; }
-    await sb.auth.resetPasswordForEmail(email);
-    toast('Link de recuperação enviado para ' + email, 'success');
-  };
-
-  function toast(msg, type='info') {
-    const c = document.getElementById('toast-container');
+  function toast(msg, type) {
+    type = type || 'info';
+    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+    const c  = document.getElementById('toast-container');
     const el = document.createElement('div');
-    el.className = `toast ${type}`;
-    el.innerHTML = `<span>${{success:'✅',error:'❌',info:'ℹ️'}[type]}</span><span>${msg}</span>`;
+    el.className = 'toast ' + type;
+    el.innerHTML = '<span>' + (icons[type]||'') + '</span><span>' + msg + '</span>';
     c.appendChild(el);
-    setTimeout(() => el.remove(), 4000);
+    setTimeout(function() { el.remove(); }, 4000);
   }
 </script>
 </body>
