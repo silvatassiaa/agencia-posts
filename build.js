@@ -12,3 +12,4 @@ writeFileSync('public/js/env.js', envJs);
 console.log('✅ env.js generated');
 console.log('   SUPABASE_URL:', url ? url.substring(0, 30) + '...' : '(not set)');
 console.log('   ANON_KEY:    ', anonKey ? anonKey.substring(0, 20) + '...' : '(not set)');
+// force redeploy Fri Apr 10 18:47:59     2026
