@@ -111,23 +111,30 @@
     document.getElementById('greeting').textContent = `Olá, ${name.split(' ')[0]}! 👋`;
 
     // Load stats
-    const [{ count: clientsCount }, { count: queuePending }, { count: queueDone }, { count: ideasCount }] = await Promise.all([
-      sb.from('clients').select('*', { count: 'exact', head: true }).eq('admin_id', session.user.id),
-      sb.from('post_queue').select('*', { count: 'exact', head: true }).in('client_id', await getClientIds(sb, session.user.id)).eq('status', 'pending'),
-      sb.from('post_queue').select('*', { count: 'exact', head: true }).in('client_id', await getClientIds(sb, session.user.id)).eq('status', 'done'),
-      sb.from('post_ideas').select('*', { count: 'exact', head: true }).in('client_id', await getClientIds(sb, session.user.id)),
-    ]);
+    const { count: clientsCount } = await sb.from('clients').select('*', { count: 'exact', head: true }).eq('admin_id', session.user.id);
     document.getElementById('stat-clients').textContent = clientsCount ?? 0;
-    document.getElementById('stat-queue').textContent   = queuePending ?? 0;
-    document.getElementById('stat-done').textContent    = queueDone ?? 0;
-    document.getElementById('stat-ideas').textContent   = ideasCount ?? 0;
+
+    const clientIds = await getClientIds(sb, session.user.id);
+    if (clientIds.length) {
+      const [{ count: queuePending }, { count: queueDone }, { count: ideasCount }] = await Promise.all([
+        sb.from('post_queue').select('*', { count: 'exact', head: true }).in('client_id', clientIds).eq('status', 'pending'),
+        sb.from('post_queue').select('*', { count: 'exact', head: true }).in('client_id', clientIds).eq('status', 'done'),
+        sb.from('post_ideas').select('*',  { count: 'exact', head: true }).in('client_id', clientIds),
+      ]);
+      document.getElementById('stat-queue').textContent = queuePending ?? 0;
+      document.getElementById('stat-done').textContent  = queueDone ?? 0;
+      document.getElementById('stat-ideas').textContent = ideasCount ?? 0;
+    } else {
+      document.getElementById('stat-queue').textContent = 0;
+      document.getElementById('stat-done').textContent  = 0;
+      document.getElementById('stat-ideas').textContent = 0;
+    }
 
     // Load clients
     const { data: clients } = await sb.from('clients').select('*').eq('admin_id', session.user.id).order('created_at', { ascending: false }).limit(6);
     renderClients(clients || []);
 
     // Load queue
-    const clientIds = await getClientIds(sb, session.user.id);
     if (clientIds.length) {
       const { data: queue } = await sb.from('post_queue').select('*, clients(business_name), post_ideas(title)').in('client_id', clientIds).order('created_at', { ascending: false }).limit(5);
       renderQueue(queue || []);
