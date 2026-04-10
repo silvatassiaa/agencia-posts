@@ -74,7 +74,7 @@ Responda SOMENTE com JSON válido:
 - talking_points: 3-5 pontos-chave do post`;
 
     const copyMsg = await anthropic.messages.create({
-      model:      'claude-opus-4-6',
+      model:      'claude-sonnet-4-6',
       max_tokens: 2000,
       messages:   [{ role: 'user', content: copyPrompt }],
     });

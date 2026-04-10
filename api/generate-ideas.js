@@ -108,7 +108,7 @@ Responda SOMENTE com um JSON válido, sem markdown, sem explicações extras. Ex
 Gere exatamente 30 ideias. Os campos obrigatórios são: position, title, format, hook, theme, rationale.`;
 
     const message = await anthropic.messages.create({
-      model:      'claude-opus-4-6',
+      model:      'claude-sonnet-4-6',
       max_tokens: 4000,
       messages:   [{ role: 'user', content: prompt }],
     });
