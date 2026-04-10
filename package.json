@@ -7,8 +7,6 @@
   "engines": { "node": ">=20" },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@sparticuz/chromium": "^133.0.0",
-    "@supabase/supabase-js": "^2.49.4",
-    "puppeteer-core": "^24.4.0"
+    "@supabase/supabase-js": "^2.49.4"
   }
 }
