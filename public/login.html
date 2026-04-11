@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login — Agência Posts</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/app.css">
   <script src="js/env.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <div class="auth-page">
@@ -19,153 +19,157 @@
     </div>
 
     <div class="auth-card">
-      <!-- Tabs -->
-      <div class="flex gap-2 mb-6" style="border-bottom:1px solid var(--border); padding-bottom:16px;">
-        <button class="btn btn-sm btn-primary" id="tab-login" type="button">Entrar</button>
-        <button class="btn btn-ghost btn-sm" id="tab-signup" type="button">Criar conta</button>
+      <!-- TEST BYPASS -->
+      <div style="background:rgba(234,179,8,0.15);border:1px solid rgba(234,179,8,0.4);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+        <span style="font-size:20px">🧪</span>
+        <div style="flex:1;font-size:0.85rem;color:var(--muted)">Modo teste: entre sem cadastro para explorar o app.</div>
+        <button type="button" class="btn btn-sm btn-primary" id="btn-anon" onclick="doAnon()">Entrar sem login</button>
       </div>
 
-      <!-- Login form -->
-      <form id="form-login" class="flex flex-col gap-4">
-        <div class="form-group">
-          <label class="label">E-mail</label>
-          <input type="email" class="input" id="login-email" placeholder="seu@email.com" required>
-        </div>
-        <div class="form-group">
-          <label class="label">Senha</label>
-          <input type="password" class="input" id="login-password" placeholder="••••••••" required>
-        </div>
-        <button type="submit" class="btn btn-primary w-full btn-lg" id="btn-login">
-          Entrar
-        </button>
-        <p class="text-sm text-muted" style="text-align:center">
-          <a href="#" id="link-forgot" style="color:var(--accent2)">Esqueci minha senha</a>
-        </p>
-      </form>
+      <div class="flex gap-2 mb-6" style="border-bottom:1px solid var(--border);padding-bottom:16px;">
+        <button class="btn btn-sm btn-primary" id="tab-login" type="button" onclick="showTab('login')">Entrar</button>
+        <button class="btn btn-ghost btn-sm" id="tab-signup" type="button" onclick="showTab('signup')">Criar conta</button>
+      </div>
 
-      <!-- Signup form -->
-      <form id="form-signup" class="flex flex-col gap-4 hidden">
-        <div class="form-group">
-          <label class="label">Seu nome</label>
-          <input type="text" class="input" id="signup-name" placeholder="Nome completo" required>
+      <!-- Login -->
+      <div id="form-login">
+        <div class="flex flex-col gap-4">
+          <div class="form-group">
+            <label class="label">E-mail</label>
+            <input type="email" class="input" id="login-email" placeholder="seu@email.com">
+          </div>
+          <div class="form-group">
+            <label class="label">Senha</label>
+            <input type="password" class="input" id="login-password" placeholder="••••••••">
+          </div>
+          <button type="button" class="btn btn-primary w-full btn-lg" id="btn-login" onclick="doLogin()">
+            Entrar
+          </button>
+          <p class="text-sm text-muted" style="text-align:center">
+            <a href="#" onclick="doForgot();return false;" style="color:var(--accent2)">Esqueci minha senha</a>
+          </p>
         </div>
-        <div class="form-group">
-          <label class="label">E-mail</label>
-          <input type="email" class="input" id="signup-email" placeholder="seu@email.com" required>
+      </div>
+
+      <!-- Signup -->
+      <div id="form-signup" style="display:none">
+        <div class="flex flex-col gap-4">
+          <div class="form-group">
+            <label class="label">Seu nome</label>
+            <input type="text" class="input" id="signup-name" placeholder="Nome completo">
+          </div>
+          <div class="form-group">
+            <label class="label">E-mail</label>
+            <input type="email" class="input" id="signup-email" placeholder="seu@email.com">
+          </div>
+          <div class="form-group">
+            <label class="label">Senha</label>
+            <input type="password" class="input" id="signup-password" placeholder="Mínimo 8 caracteres">
+          </div>
+          <button type="button" class="btn btn-primary w-full btn-lg" id="btn-signup" onclick="doSignup()">
+            Criar conta
+          </button>
         </div>
-        <div class="form-group">
-          <label class="label">Senha</label>
-          <input type="password" class="input" id="signup-password" placeholder="Mínimo 8 caracteres" minlength="8" required>
-        </div>
-        <button type="submit" class="btn btn-primary w-full btn-lg" id="btn-signup">
-          Criar conta
-        </button>
-      </form>
+      </div>
     </div>
 
-    <div class="auth-footer">
-      Agência Posts · Powered by Claude AI
-    </div>
+    <div class="auth-footer">Agência Posts · Powered by Claude AI</div>
   </div>
 </div>
 
 <div id="toast-container"></div>
 
 <script>
-  // Non-module script — runs synchronously, no async load issues
+  var sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-  const SUPABASE_URL      = window.SUPABASE_URL;
-  const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
-
-  // Load Supabase via CDN
-  const script = document.createElement('script');
-  script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
-  script.onload = function() {
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-    // Redirect if already logged in
-    sb.auth.getSession().then(({ data: { session } }) => {
-      if (session) window.location.href = '/dashboard.html';
-    });
-
-    // Tab switching
-    document.getElementById('tab-login').addEventListener('click', () => showTab('login'));
-    document.getElementById('tab-signup').addEventListener('click', () => showTab('signup'));
-
-    // Login form
-    document.getElementById('form-login').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const btn = document.getElementById('btn-login');
-      btn.innerHTML = '<span class="spinner"></span> Entrando...';
-      btn.disabled = true;
-
-      const email    = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
-
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-
-      if (error) {
-        toast(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message, 'error');
-        btn.innerHTML = 'Entrar';
-        btn.disabled = false;
-      } else {
-        window.location.href = '/dashboard.html';
-      }
-    });
-
-    // Signup form
-    document.getElementById('form-signup').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      const btn = document.getElementById('btn-signup');
-      btn.innerHTML = '<span class="spinner"></span> Criando...';
-      btn.disabled = true;
-
-      const name     = document.getElementById('signup-name').value;
-      const email    = document.getElementById('signup-email').value;
-      const password = document.getElementById('signup-password').value;
-
-      const { error } = await sb.auth.signUp({
-        email, password,
-        options: { data: { name, role: 'admin' } }
-      });
-
-      if (error) {
-        toast(error.message, 'error');
-        btn.innerHTML = 'Criar conta';
-        btn.disabled = false;
-      } else {
-        toast('Conta criada! Verifique seu e-mail para confirmar.', 'success');
-        showTab('login');
-      }
-    });
-
-    // Forgot password
-    document.getElementById('link-forgot').addEventListener('click', async function(e) {
-      e.preventDefault();
-      const email = document.getElementById('login-email').value;
-      if (!email) { toast('Digite seu e-mail primeiro', 'error'); return; }
-      await sb.auth.resetPasswordForEmail(email);
-      toast('Link enviado para ' + email, 'success');
-    });
-  };
-  document.head.appendChild(script);
+  // Redirect if already logged in
+  sb.auth.getSession().then(function(r) {
+    if (r.data && r.data.session) window.location.href = '/dashboard.html';
+  });
 
   function showTab(tab) {
-    document.getElementById('form-login').classList.toggle('hidden', tab !== 'login');
-    document.getElementById('form-signup').classList.toggle('hidden', tab !== 'signup');
+    document.getElementById('form-login').style.display  = tab === 'login'  ? '' : 'none';
+    document.getElementById('form-signup').style.display = tab === 'signup' ? '' : 'none';
     document.getElementById('tab-login').className  = tab === 'login'  ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
     document.getElementById('tab-signup').className = tab === 'signup' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
   }
 
+  async function doLogin() {
+    var email    = document.getElementById('login-email').value;
+    var password = document.getElementById('login-password').value;
+    if (!email || !password) { toast('Preencha e-mail e senha', 'error'); return; }
+
+    var btn = document.getElementById('btn-login');
+    btn.innerHTML = '<span class="spinner"></span> Entrando...';
+    btn.disabled = true;
+
+    var result = await sb.auth.signInWithPassword({ email: email, password: password });
+
+    if (result.error) {
+      var msg = result.error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : result.error.message;
+      toast(msg, 'error');
+      btn.innerHTML = 'Entrar';
+      btn.disabled = false;
+    } else {
+      window.location.href = '/dashboard.html';
+    }
+  }
+
+  async function doSignup() {
+    var name     = document.getElementById('signup-name').value;
+    var email    = document.getElementById('signup-email').value;
+    var password = document.getElementById('signup-password').value;
+    if (!email || !password) { toast('Preencha todos os campos', 'error'); return; }
+
+    var btn = document.getElementById('btn-signup');
+    btn.innerHTML = '<span class="spinner"></span> Criando...';
+    btn.disabled = true;
+
+    var result = await sb.auth.signUp({
+      email: email, password: password,
+      options: { data: { name: name, role: 'admin' } }
+    });
+
+    if (result.error) {
+      toast(result.error.message, 'error');
+      btn.innerHTML = 'Criar conta';
+      btn.disabled = false;
+    } else {
+      toast('Conta criada com sucesso!', 'success');
+      showTab('login');
+    }
+  }
+
+  async function doAnon() {
+    var btn = document.getElementById('btn-anon');
+    btn.innerHTML = '<span class="spinner"></span> Entrando...';
+    btn.disabled = true;
+    var result = await sb.auth.signInAnonymously();
+    if (result.error) {
+      toast('Erro no modo teste: ' + result.error.message, 'error');
+      btn.innerHTML = 'Entrar sem login';
+      btn.disabled = false;
+    } else {
+      window.location.href = '/dashboard.html';
+    }
+  }
+
+  async function doForgot() {
+    var email = document.getElementById('login-email').value;
+    if (!email) { toast('Digite seu e-mail primeiro', 'error'); return; }
+    await sb.auth.resetPasswordForEmail(email);
+    toast('Link enviado para ' + email, 'success');
+  }
+
   function toast(msg, type) {
     type = type || 'info';
-    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
-    const c  = document.getElementById('toast-container');
-    const el = document.createElement('div');
+    var icons = { success: '✅', error: '❌', info: 'ℹ️' };
+    var c = document.getElementById('toast-container');
+    var el = document.createElement('div');
     el.className = 'toast ' + type;
     el.innerHTML = '<span>' + (icons[type]||'') + '</span><span>' + msg + '</span>';
     c.appendChild(el);
-    setTimeout(function() { el.remove(); }, 4000);
+    setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 4000);
   }
 </script>
 </body>

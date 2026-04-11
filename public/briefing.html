@@ -199,11 +199,15 @@
   let clientData = null;
 
   async function init() {
-    const { data: { session } } = await sb.auth.getSession();
+    let { data: { session } } = await sb.auth.getSession();
+    if (!session) {
+      const anon = await sb.auth.signInAnonymously();
+      session = anon.data?.session;
+    }
     if (!session) { window.location.href = '/login.html'; return; }
-    const name = session.user.user_metadata?.name || session.user.email;
+    const name = session.user.user_metadata?.name || session.user.email || 'Visitante';
     document.getElementById('user-name').textContent = name;
-    document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+    document.getElementById('user-avatar').textContent = (name[0] || '?').toUpperCase();
 
     if (!clientId) { window.location.href = '/clients.html'; return; }
 
